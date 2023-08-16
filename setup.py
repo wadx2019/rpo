@@ -10,6 +10,6 @@ setup(
                       'pandas',
                       'matplotlib'],
     author="dingsht",
-    description="reduced policy optimization",
+    description="official implementation of reduced policy optimization",
     packages=['rpo']
 )
