@@ -360,7 +360,58 @@ class EVOPFEnv(gym.Env):
         return self.state.copy()
 
     def render(self, mode="human"):
-        pass
+        import igraph
+        import matplotlib.pyplot as plt
+        graph = igraph.Graph()
+        pv_color = 'orange'
+        num_bus = len(self.ppc['bus'])
+        num_gen = len(self.ppc['gen'])
+        generator_list = [int(gen_info[0]) for gen_info in self.ppc['gen']]
+        # print(f"generator_list: {generator_list}")
+        # generator_list: [1, 2, 3, 6, 8]
+        # print(f"self.pd_max: {self.pd_max}")
+        # print(f"self.state: {self.state}")
+        s = 20
+        label_size = 15
+        for bus_idx in range(num_bus):
+            # enumerate all the bus
+            shape = 'circle'
+            if bus_idx + 1 in generator_list:
+                # the bus is a generator
+                if self.action is not None:
+                    gen_idx = generator_list.index(bus_idx + 1)
+                    color_ratio = self.action[gen_idx] / self.pmax[gen_idx]
+                    c = (1, 1 - color_ratio, 1 - color_ratio)
+                else:
+                    c = (1, 1, 1)
+            else:
+                c = (1, 1 - 0.5 * self.state[bus_idx], 1 - self.state[bus_idx])
+            graph.add_vertex(color=c, size=s, label=f"{bus_idx + 1}", shape=shape, label_dist=2,
+                             label_size=label_size, )
+
+        for edge_info in self.ppc['branch']:
+            graph.add_edge(int(edge_info[0]) - 1, int(edge_info[1]) - 1)
+
+        for gen_idx, generator in enumerate(generator_list):
+            shape = 'square'
+            if self.next_state_evs is not None:
+                color_ratio = (self.action[gen_idx] - self.evs.low) / self.evs.high
+                c = (1 - color_ratio, 1 - color_ratio, 1)
+            else:
+                c = (1, 1, 1)
+            graph.add_vertex(color=c, size=s, label=f"{generator}", shape=shape, label_dist=2,
+                             label_size=label_size, )
+            if self.action is not None:
+                color_ratio = self.action[gen_idx - num_gen] / self.evs.p_max
+                if color_ratio > 0:
+                    c = (1, 1 - color_ratio, 1 - color_ratio)
+                else:
+                    c = (1 + color_ratio, 1, 1 + color_ratio)
+            graph.add_edge(generator - 1, gen_idx + num_bus, color=c)
+
+        igraph.plot(graph, "output1.pdf", margin=50, curved=True)
+
+        return None
 
     def close(self):
         pass
