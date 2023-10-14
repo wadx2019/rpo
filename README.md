@@ -21,7 +21,7 @@ pandas                        1.4.4
 To run the experiments, you need to first install the python package rpo via running `pip install -e .` in the current directory.
 
 ## Getting started
-Then, You can simply 
+Then, you can simply 
 
 run `python scripts/cart_exp.py` to re-implement our experiments on the Safe Cartpole environment using RPODDPG algorithm.
 
