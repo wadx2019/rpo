@@ -7,10 +7,18 @@ Code release for **Reduced Policy Optimization for Continuous Control with Hard 
 ![](./img/RPO_pipeline.jpg)
 
 ## Requirements
-
+```
+numpy                         1.21.6
+torch                         1.13.1
+gym                           0.19.0
+matplotlib                    3.5.2
+scipy                         1.9.1
+scikit-learn                  1.0.2
+pandas                        1.4.4
+```
 ## Preparation
 
-To run the experiments, you need to first install the python package rpo via running `pip install .` in the current directory.
+To run the experiments, you need to first install the python package rpo via running `pip install -e .` in the current directory.
 
 ## Getting started
 Then, You can simply 
