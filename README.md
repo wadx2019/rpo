@@ -4,7 +4,7 @@ Code release for **Reduced Policy Optimization for Continuous Control with Hard 
 
 [[paper]](#) [[project page]](#)
 
-![](img/RPO-pipeline.jpg)
+![](./img/RPO-pipeline.jpg)
 
 ## Requirements
 
