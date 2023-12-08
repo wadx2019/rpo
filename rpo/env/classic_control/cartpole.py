@@ -5,7 +5,7 @@ permalink: https://perma.cc/C9ZM-652R
 
 Modified for swing up problem with constraints
 """
-
+import copy
 import math
 import gym
 from gym import spaces, logger
@@ -67,8 +67,8 @@ class CartSafeEnv(gym.Env):
     """
 
     metadata = {
-        'render.modes': ['human', 'rgb_array'],
-        'video.frames_per_second': 50
+        "render_modes": ["human", "rgb_array"],
+        "render_fps": 50,
     }
 
     def __init__(self):
@@ -112,7 +112,6 @@ class CartSafeEnv(gym.Env):
         self.ineq_num = 6
 
         self.seed()
-        self.viewer = None
         self.state = None
 
         self.partial_actions = np.random.choice(self.action_dim, self.action_dim-self.eq_num, replace=False)
@@ -149,6 +148,16 @@ class CartSafeEnv(gym.Env):
 
         self.volatile = False
         self.update = None
+
+        # render
+        self.screen_width = 600
+        self.screen_height = 400
+        self.screen = None
+        self.clock = None
+        self.isopen = True
+
+        self.action = None
+        self.last_state = None
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -191,6 +200,9 @@ class CartSafeEnv(gym.Env):
             x = x + self.tau * x_dot
             theta_dot = theta_dot + self.tau * thetaacc
             theta = theta + self.tau * theta_dot
+
+        self.last_state = copy.deepcopy(state)
+        self.action = action.copy()
         self.state = (x, x_dot, xacc, theta, theta_dot, thetaacc)
 
         done = bool(
@@ -219,77 +231,138 @@ class CartSafeEnv(gym.Env):
     def reset(self):
         # self.state = np.zeros((6,))
         self.state = self.np_random.uniform(low=-0.05, high=0.05, size=(6,))
+        self.action = None
+        self.last_state = None
         #self.state[4:] = self.np_random.uniform(low=-0.05, high=0.05, size=(2,))
         # self.state[3] += math.pi
         self.steps_beyond_done = None
         return np.array(self.state)
 
     def render(self, mode='human'):
-        screen_width = 600
-        screen_height = 400
+
+        if self.action is None or self.last_state is None:
+            raise NotImplementedError("cannot implement render before step!")
+
+        try:
+            import pygame
+            from pygame import gfxdraw
+        except ImportError:
+            raise NotImplementedError(
+                "pygame is not installed, run `pip install gym[classic_control]`"
+            )
+
+        if self.screen is None:
+            pygame.init()
+            if mode == "human":
+                pygame.display.init()
+                self.screen = pygame.display.set_mode(
+                    (self.screen_width, self.screen_height)
+                )
+            else:  # mode == "rgb_array"
+                self.screen = pygame.Surface((self.screen_width, self.screen_height))
+        if self.clock is None:
+            self.clock = pygame.time.Clock()
 
         world_width = self.x_threshold * 2
-        scale = screen_width / world_width
-        carty = 100  # TOP OF CART
+        scale = self.screen_width / world_width
         polewidth = 10.0
         polelen = scale * (2 * self.length)
         cartwidth = 50.0
         cartheight = 30.0
 
-        if self.viewer is None:
-            from gym.envs.classic_control import rendering
-            self.viewer = rendering.Viewer(screen_width, screen_height)
-            l, r, t, b = -cartwidth / 2, cartwidth / 2, cartheight / 2, -cartheight / 2
-            axleoffset = cartheight / 4.0
-            cart = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
-            self.carttrans = rendering.Transform()
-            cart.add_attr(self.carttrans)
-            self.viewer.add_geom(cart)
-            l, r, t, b = -polewidth / 2, polewidth / 2, polelen - polewidth / 2, -polewidth / 2
-            pole = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
-            pole.set_color(.8, .6, .4)
-            self.poletrans = rendering.Transform(translation=(0, axleoffset))
-            pole.add_attr(self.poletrans)
-            pole.add_attr(self.carttrans)
-            self.viewer.add_geom(pole)
-            self.axle = rendering.make_circle(polewidth / 2)
-            self.axle.add_attr(self.poletrans)
-            self.axle.add_attr(self.carttrans)
-            self.axle.set_color(.5, .5, .8)
-            self.viewer.add_geom(self.axle)
-            self.track = rendering.Line((0, carty), (screen_width, carty))
-            self.track.set_color(0, 0, 0)
-            self.viewer.add_geom(self.track)
-
-            # self.constr_line_l = rendering.Line((-self.x_constraint * scale + screen_width / 2., carty - 100),
-            #                                     (-self.x_constraint * scale + screen_width / 2., carty + 1000))
-            # self.constr_line_l.set_color(1, 0, 0)
-            # self.viewer.add_geom(self.constr_line_l)
-            # self.constr_line_r = rendering.Line((self.x_constraint * scale + screen_width / 2., carty - 100),
-            #                                     (self.x_constraint * scale + screen_width / 2., carty + 1000))
-            # self.constr_line_r.set_color(1, 0, 0)
-            # self.viewer.add_geom(self.constr_line_r)
-
-            self._pole_geom = pole
-
-        if self.state is None: return None
-
-        # Edit the pole polygon vertex
-        pole = self._pole_geom
-        l, r, t, b = -polewidth / 2, polewidth / 2, polelen - polewidth / 2, -polewidth / 2
-        pole.v = [(l, b), (l, t), (r, t), (r, b)]
+        if self.state is None:
+            return None
 
         x = self.state
-        cartx = x[0] * scale + screen_width / 2.0  # MIDDLE OF CART
-        self.carttrans.set_translation(cartx, carty)
-        self.poletrans.set_rotation(-x[2])
 
-        return self.viewer.render(return_rgb_array=mode == 'rgb_array')
+        self.surf = pygame.Surface((self.screen_width, self.screen_height))
+        self.surf.fill((255, 255, 255))
+
+        l, r, t, b = -cartwidth / 2, cartwidth / 2, cartheight / 2, -cartheight / 2
+        axleoffset = cartheight / 4.0
+        cartx = x[0] * scale + self.screen_width / 2.0  # MIDDLE OF CART
+        carty = 100  # TOP OF CART
+        cart_coords = [(l, b), (l, t), (r, t), (r, b)]
+        cart_coords = [(c[0] + cartx, c[1] + carty) for c in cart_coords]
+        gfxdraw.aapolygon(self.surf, cart_coords, (0, 0, 0))
+        gfxdraw.filled_polygon(self.surf, cart_coords, (0, 0, 0))
+
+        l, r, t, b = (
+            -polewidth / 2,
+            polewidth / 2,
+            polelen - polewidth / 2,
+            -polewidth / 2,
+        )
+
+        pole_coords = []
+        for coord in [(l, b), (l, t), (r, t), (r, b)]:
+            coord = pygame.math.Vector2(coord).rotate_rad(-x[2])
+            coord = (coord[0] + cartx, coord[1] + carty + axleoffset)
+            pole_coords.append(coord)
+        gfxdraw.aapolygon(self.surf, pole_coords, (202, 152, 101))
+        gfxdraw.filled_polygon(self.surf, pole_coords, (202, 152, 101))
+
+        gfxdraw.aacircle(
+            self.surf,
+            int(cartx),
+            int(carty + axleoffset),
+            int(polewidth / 2),
+            (129, 132, 203),
+        )
+        gfxdraw.filled_circle(
+            self.surf,
+            int(cartx),
+            int(carty + axleoffset),
+            int(polewidth / 2),
+            (129, 132, 203),
+        )
+
+        gfxdraw.hline(self.surf, 0, self.screen_width, carty, (0, 0, 0))
+
+        # calculate violation
+
+        ineq_viol = self.ineq_dist_np(self.last_state, self.action)
+        eq_viol = self.eq_dist_np(self.last_state, self.action)
+        thres = 1e-3
+
+        if (ineq_viol > thres).any() or (eq_viol > thres).any():
+            test_led_color = (255, 0, 0)
+        else:
+            test_led_color = (0, 255, 0)
+        gfxdraw.aacircle(
+            self.surf,
+            int(cartx + 15),
+            int(carty),
+            int(polewidth / 2),
+            test_led_color,
+        )
+        gfxdraw.filled_circle(
+            self.surf,
+            int(cartx + 15),
+            int(carty),
+            int(polewidth / 2),
+            test_led_color,
+        )
+
+        self.surf = pygame.transform.flip(self.surf, False, True)
+        self.screen.blit(self.surf, (0, 0))
+        if mode == "human":
+            pygame.event.pump()
+            self.clock.tick(self.metadata["render_fps"])
+            pygame.display.flip()
+
+        elif mode == "rgb_array":
+            return np.transpose(
+                np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2)
+            )
 
     def close(self):
-        if self.viewer:
-            self.viewer.close()
-            self.viewer = None
+        if self.screen is not None:
+            import pygame
+
+            pygame.display.quit()
+            pygame.quit()
+            self.isopen = False
 
     ## methods for hard constraint
 
@@ -343,6 +416,10 @@ class CartSafeEnv(gym.Env):
 
     def eq_resid_np(self, state, action):
         return self.diff_eq_bias_np - action @ self.diff_eq_np.T
+
+    def eq_dist_np(self, state, action):
+        resids = self.eq_resid_np(state, action)
+        return np.abs(resids)
 
     def hold_eq(self):
         self.holding_eq = True

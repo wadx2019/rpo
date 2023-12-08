@@ -1,3 +1,5 @@
+import copy
+
 import gym
 from gym import spaces
 from gym.utils import seeding
@@ -15,6 +17,8 @@ from copy import deepcopy
 import os
 
 from .data import DemandLoader, PriceLoader
+
+import igraph
 
 class Battery(object):
 
@@ -333,6 +337,11 @@ class EVOPFEnv(gym.Env):
         self.ineq_num = 58
 
         self.state = None
+        self.action = None
+        self.state_grid = None
+        self.state_evs = None
+
+        self.viewer = None
 
         self.volatile = True
 
@@ -348,7 +357,13 @@ class EVOPFEnv(gym.Env):
         state = self.state
         self.state = next_state
 
-        return next_state, reward, done, {'ineq_viol': self.ineq_dist_np(state, action), 'eq_viol': self.eq_resid_np(state, action)}
+        #render
+        self.action = action
+        grid, evs = self.decompose(state)
+        self.state_grid = grid.copy()
+        self.state_evs = evs.copy()
+
+        return state, reward, done, {'ineq_viol': self.ineq_dist_np(state, action), 'eq_viol': self.eq_resid_np(state, action)}
 
 
     def reset(self):
@@ -357,11 +372,22 @@ class EVOPFEnv(gym.Env):
 
         self.state = np.concatenate([state_grid, state_evs])
 
+        # render
+        self.action = None
+        self.state_grid = None
+        self.state_evs = None
+
         return self.state.copy()
 
     def render(self, mode="human"):
-        import igraph
-        import matplotlib.pyplot as plt
+        screen_width = 600
+        screen_height = 600
+        from gym.envs.classic_control import rendering
+        if self.viewer is None:
+            self.viewer = rendering.Viewer(screen_width, screen_height)
+
+        if self.action is None or self.state_grid is None or self.state_evs is None:
+            raise NotImplementedError("cannot implement render before step!")
         graph = igraph.Graph()
         pv_color = 'orange'
         num_bus = len(self.ppc['bus'])
@@ -385,7 +411,7 @@ class EVOPFEnv(gym.Env):
                 else:
                     c = (1, 1, 1)
             else:
-                c = (1, 1 - 0.5 * self.state[bus_idx], 1 - self.state[bus_idx])
+                c = (1, 1 - 0.5 * self.state_grid[bus_idx], 1 - self.state_grid[bus_idx])
             graph.add_vertex(color=c, size=s, label=f"{bus_idx + 1}", shape=shape, label_dist=2,
                              label_size=label_size, )
 
@@ -394,8 +420,8 @@ class EVOPFEnv(gym.Env):
 
         for gen_idx, generator in enumerate(generator_list):
             shape = 'square'
-            if self.next_state_evs is not None:
-                color_ratio = (self.action[gen_idx] - self.evs.low) / self.evs.high
+            if self.state_evs is not None:
+                color_ratio = (self.state_evs[gen_idx] - self.evs.low) / self.evs.high
                 c = (1 - color_ratio, 1 - color_ratio, 1)
             else:
                 c = (1, 1, 1)
@@ -409,12 +435,24 @@ class EVOPFEnv(gym.Env):
                     c = (1 + color_ratio, 1, 1 + color_ratio)
             graph.add_edge(generator - 1, gen_idx + num_bus, color=c)
 
-        igraph.plot(graph, "output1.pdf", margin=50, curved=True)
+        igraph.plot(graph, "tmp.png", margin=50, curved=True)
+        imgtrans = rendering.Transform(translation=(300, 300))
+        img = rendering.Image("tmp.png", 600, 600)
+        img.add_attr(imgtrans)
+        self.viewer.add_onetime(img)
 
-        return None
+        return self.viewer.render(return_rgb_array=mode == 'rgb_array')
 
     def close(self):
-        pass
+        if self.viewer:
+            self.viewer.close()
+            self.viewer = None
+
+        if os.path.exists("tmp.png"):
+            os.remove("tmp.png")
+
+    def decompose(self, state):
+        return state[:2*self.nbus], state[2*self.nbus:]
 
     @property
     def partial_actions(self):

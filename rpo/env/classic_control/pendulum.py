@@ -1,14 +1,16 @@
 import gym
 from gym import spaces
 from gym.utils import seeding
-from gym.error import DependencyNotInstalled
 import numpy as np
 from os import path
 import torch
 
 
 class SpringPendulumEnv(gym.Env):
-    metadata = {"render.modes": ["human", "rgb_array"], "video.frames_per_second": 30}
+    metadata = {
+        "render_modes": ["human", "rgb_array"],
+        "render_fps": 30,
+    }
 
     def __init__(self, g=10.0):
         self.max_speed = 8.0
@@ -20,7 +22,6 @@ class SpringPendulumEnv(gym.Env):
         self.dt = 0.05
         self.g = g
         self.m = 0.5
-        self.viewer = None
         self.k = 1.0
         self.l0 = 1.0
 
@@ -66,6 +67,11 @@ class SpringPendulumEnv(gym.Env):
 
         self.volatile = False
         self.update = None
+
+        # render
+        self.screen = None
+        self.screen_dim = 600
+        self.clock = None
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -137,32 +143,24 @@ class SpringPendulumEnv(gym.Env):
         self.idx_cos, self.idx_sin, self.idx_thdot, self.idx_l, self.idx_ldot = np.arange(5)
 
     def render(self, mode="human"):
-        self.render_mode = "rgb_array"
-        if self.render_mode is None:
-            gym.logger.warn(
-                "You are calling render method without specifying any render mode. "
-                "You can specify the render_mode at initialization, "
-                f'e.g. gym("{self.spec.id}", render_mode="rgb_array")'
-            )
-            return
-
         try:
             import pygame
             from pygame import gfxdraw
         except ImportError:
-            raise DependencyNotInstalled(
+            raise NotImplementedError(
                 "pygame is not installed, run `pip install gym[classic_control]`"
             )
 
         if self.screen is None:
             pygame.init()
-            if self.render_mode == "human":
+            if mode == "human":
                 pygame.display.init()
                 self.screen = pygame.display.set_mode(
                     (self.screen_dim, self.screen_dim)
                 )
             else:  # mode in "rgb_array"
                 self.screen = pygame.Surface((self.screen_dim, self.screen_dim))
+
         if self.clock is None:
             self.clock = pygame.time.Clock()
 
@@ -174,8 +172,8 @@ class SpringPendulumEnv(gym.Env):
         offset = self.screen_dim // 2
 
         # change this part to change the length of spring
-        # rod_length = 1 * scale
-        rod_length = self.state[1] * scale
+
+        rod_length = self.state[2] * scale
         rod_width = 0.2 * scale
         l, r, t, b = 0, rod_length, rod_width / 2, -rod_width / 2
         coords = [(l, b), (l, t), (r, t), (r, b)]
@@ -184,19 +182,6 @@ class SpringPendulumEnv(gym.Env):
             c = pygame.math.Vector2(c).rotate_rad(self.state[0] + np.pi / 2)
             c = (c[0] + offset, c[1] + offset)
             transformed_coords.append(c)
-
-        # replace thie part with spring
-        # gfxdraw.aapolygon(self.surf, transformed_coords, (204, 77, 77))
-        # gfxdraw.filled_polygon(self.surf, transformed_coords, (204, 77, 77))
-
-        # pygame.draw.aaline(self.surf, (204, 77, 77),
-        #                    (transformed_coords[0][0], (transformed_coords[0][1] + transformed_coords[1][1]) / 2),
-        #                    (transformed_coords[2][0], (transformed_coords[2][1] + transformed_coords[3][1]) / 2))
-
-        gfxdraw.aacircle(self.surf, offset, offset, int(rod_width / 10), (0, 0, 0))
-        gfxdraw.filled_circle(
-            self.surf, offset, offset, int(rod_width / 10), (0, 0, 0)
-        )
 
         spring_coords = self.generate_spring_coordinate(transformed_coords)
         # print(spring_coords)
@@ -212,30 +197,13 @@ class SpringPendulumEnv(gym.Env):
             self.surf, rod_end[0], rod_end[1], int(rod_width / 2), (255, 0, 0)
         )
 
-        fname = path.join(path.dirname(__file__), "assets/clockwise.png")
-        img = pygame.image.load(fname)
-        if self.last_u is not None:
-            scale_img = pygame.transform.smoothscale(
-                img,
-                (scale * np.abs(self.last_u) / 2, scale * np.abs(self.last_u) / 2),
-            )
-            is_flip = bool(self.last_u > 0)
-            scale_img = pygame.transform.flip(scale_img, is_flip, True)
-            self.surf.blit(
-                scale_img,
-                (
-                    offset - scale_img.get_rect().centerx,
-                    offset - scale_img.get_rect().centery,
-                ),
-            )
-
         # drawing axle
-        # gfxdraw.aacircle(self.surf, offset, offset, int(0.05 * scale), (0, 0, 0))
-        # gfxdraw.filled_circle(self.surf, offset, offset, int(0.05 * scale), (0, 0, 0))
+        gfxdraw.aacircle(self.surf, offset, offset, int(0.02 * scale), (0, 0, 0))
+        gfxdraw.filled_circle(self.surf, offset, offset, int(0.02 * scale), (0, 0, 0))
 
         self.surf = pygame.transform.flip(self.surf, False, True)
         self.screen.blit(self.surf, (0, 0))
-        if self.render_mode == "human":
+        if mode == "human":
             pygame.event.pump()
             self.clock.tick(self.metadata["render_fps"])
             pygame.display.flip()
@@ -249,8 +217,8 @@ class SpringPendulumEnv(gym.Env):
         num_fold = 70
         frac_line = 0.15
         spring_coords = []
-        start_point = (coords[0][0], (coords[0][1] + coords[1][1]) / 2)
-        end_point = (coords[2][0], (coords[2][1] + coords[3][1]) / 2)
+        start_point = ((coords[0][0] + coords[1][0]) / 2, (coords[0][1] + coords[1][1]) / 2)
+        end_point = ((coords[2][0] + coords[3][0]) / 2, (coords[2][1] + coords[3][1]) / 2)
         start_spring_point = ((1 - frac_line) * start_point[0] + frac_line * end_point[0],
                               (1 - frac_line) * start_point[1] + frac_line * end_point[1])
         end_spring_point = (frac_line * start_point[0] + (1 - frac_line) * end_point[0],
@@ -279,10 +247,12 @@ class SpringPendulumEnv(gym.Env):
         return spring_coords
 
     def close(self):
-        if self.viewer:
-            self.viewer.close()
-            self.viewer = None
+        if self.screen is not None:
+            import pygame
 
+            pygame.display.quit()
+            pygame.quit()
+            self.isopen = False
     def complete_partial(self, state, action_partial):
         self.set_eq(state, action_partial)
         action = torch.zeros(state.shape[0], self.action_dim, device=self.device)
