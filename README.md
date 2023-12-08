@@ -15,6 +15,9 @@ matplotlib                    3.5.2
 scipy                         1.9.1
 scikit-learn                  1.0.2
 pandas                        1.4.4
+pygame                        2.1.0
+pycairo                       1.11.0
+igraph                        0.10.8
 ```
 ## Preparation
 

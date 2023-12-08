@@ -8,7 +8,10 @@ setup(
                       'scipy',
                       'scikit-learn',
                       'pandas',
-                      'matplotlib'],
+                      'matplotlib',
+                      'pygame',
+                      'pycairo',
+                      'igraph'],
     author="dingsht",
     description="official implementation of reduced policy optimization",
     packages=['rpo']
