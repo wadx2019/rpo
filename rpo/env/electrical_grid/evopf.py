@@ -363,7 +363,7 @@ class EVOPFEnv(gym.Env):
         self.state_grid = grid.copy()
         self.state_evs = evs.copy()
 
-        return state, reward, done, {'ineq_viol': self.ineq_dist_np(state, action), 'eq_viol': self.eq_resid_np(state, action)}
+        return next_state, reward, done, {'ineq_viol': self.ineq_dist_np(state, action), 'eq_viol': self.eq_resid_np(state, action)}
 
 
     def reset(self):
