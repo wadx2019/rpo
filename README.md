@@ -1,7 +1,7 @@
 # [NeurIPS 2023] Reduced Policy Optimization for Continuous Control with Hard Constraints
 
 ## **Note!!!**
-**We apologize for the bug in ```step``` function of EVOPF-v0 environment. It returns the current state rather than the next state incorrectly. So, if you are using the code before, please modify this bug, or delete it and clone the newest version. Apologize!!!**
+**We apologize for uploading an incorrect version of the EVOPF-v0 environment. Concretely, the ```step``` function of the EVOPF-v0 environment returns the current state rather than the next state incorrectly. So, if you are using the code before, please modify this bug, or delete it and clone the newest version. You can reproduce the result reported in our paper with this modification. Apologize again!!!**
 
 Code release for **Reduced Policy Optimization for Continuous Control with Hard Constraints (NeurIPS 2023)**.
 
